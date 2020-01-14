@@ -1,7 +1,7 @@
 module Main exposing (Model, Msg, init, subscriptions, update, view)
 
 import Browser
-import Html exposing (Html, div, text)
+import Html exposing (Html, div, p, text)
 import Http exposing (Error)
 import Json.Decode exposing (Decoder, field, list, string)
 
@@ -69,9 +69,14 @@ viewPuns model =
         Success puns ->
             div []
                 (List.map
-                    text
+                    punToParagraph
                     puns
                 )
+
+
+punToParagraph : Pun -> Html Msg
+punToParagraph pun =
+    p [] [ text pun ]
 
 
 getPuns : Cmd Msg
