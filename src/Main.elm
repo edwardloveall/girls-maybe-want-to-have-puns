@@ -77,7 +77,7 @@ viewPuns model =
 getPuns : Cmd Msg
 getPuns =
     Http.get
-        { url = "http://rhymebrain.com/talk?function=getRhymes&word=heart"
+        { url = "https://rhymebrain.com/talk?function=getRhymes&word=heart"
         , expect = Http.expectJson GotPuns punDecoder
         }
 
