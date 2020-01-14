@@ -3,7 +3,7 @@ module Main exposing (Model, Msg, init, subscriptions, update, view)
 import Browser
 import Html exposing (Html, div, p, text)
 import Http exposing (Error)
-import Json.Decode exposing (Decoder, field, list, string)
+import Json.Decode exposing (Decoder, field, int, list, map2, string)
 
 
 main : Program () Model Msg
@@ -16,32 +16,34 @@ main =
         }
 
 
-type alias Pun =
-    String
+type alias Rhyme =
+    { word : String
+    , score : Int
+    }
 
 
 type Model
     = Failure
     | Loading
-    | Success (List Pun)
+    | Success (List Rhyme)
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Loading, getPuns )
+    ( Loading, getRhymes )
 
 
 type Msg
-    = GotPuns (Result Error (List Pun))
+    = GotRhymes (Result Error (List Rhyme))
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg _ =
     case msg of
-        GotPuns result ->
+        GotRhymes result ->
             case result of
-                Ok puns ->
-                    ( Success puns, Cmd.none )
+                Ok rhymes ->
+                    ( Success rhymes, Cmd.none )
 
                 Err _ ->
                     ( Failure, Cmd.none )
@@ -66,27 +68,44 @@ viewPuns model =
         Loading ->
             text "Loading..."
 
-        Success puns ->
+        Success rhymes ->
             div []
                 (List.map
                     punToParagraph
-                    puns
+                    (goodRhymes
+                        rhymes
+                    )
                 )
 
 
-punToParagraph : Pun -> Html Msg
-punToParagraph pun =
-    p [] [ text pun ]
+goodRhymes : List Rhyme -> List Rhyme
+goodRhymes rhymes =
+    List.filter goodRhyme rhymes
 
 
-getPuns : Cmd Msg
-getPuns =
+goodRhyme : Rhyme -> Bool
+goodRhyme rhyme =
+    rhyme.score >= 300
+
+
+punToParagraph : Rhyme -> Html Msg
+punToParagraph rhyme =
+    p [] [ text rhyme.word ]
+
+
+getRhymes : Cmd Msg
+getRhymes =
     Http.get
         { url = "https://rhymebrain.com/talk?function=getRhymes&word=heart"
-        , expect = Http.expectJson GotPuns punDecoder
+        , expect = Http.expectJson GotRhymes rhymesDecoder
         }
 
 
-punDecoder : Decoder (List Pun)
-punDecoder =
-    list (field "word" string)
+rhymesDecoder : Decoder (List Rhyme)
+rhymesDecoder =
+    list rhymeDecoder
+
+
+rhymeDecoder : Decoder Rhyme
+rhymeDecoder =
+    map2 Rhyme (field "word" string) (field "score" int)
