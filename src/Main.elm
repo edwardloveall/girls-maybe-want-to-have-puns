@@ -70,12 +70,18 @@ viewPuns model =
 
         Success rhymes ->
             div []
-                (List.map
-                    punToParagraph
-                    (goodRhymes
-                        rhymes
-                    )
+                (rhymeList
+                    rhymes
                 )
+
+
+rhymeList : List Rhyme -> List (Html Msg)
+rhymeList rhymes =
+    List.map
+        rhymeToParagraph
+        (goodRhymes
+            rhymes
+        )
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -88,8 +94,8 @@ goodRhyme rhyme =
     rhyme.score >= 300
 
 
-punToParagraph : Rhyme -> Html Msg
-punToParagraph rhyme =
+rhymeToParagraph : Rhyme -> Html Msg
+rhymeToParagraph rhyme =
     p [] [ text rhyme.word ]
 
 
