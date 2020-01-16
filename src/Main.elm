@@ -33,6 +33,7 @@ type alias PhraseResult =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
+    , word : String
     }
 
 
@@ -48,7 +49,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading, Cmd.batch [ getRhymes, getPhrases ] )
+    ( Model Loading Loading "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
 
 
 type Msg
@@ -70,7 +71,7 @@ update msg model =
         GotPhrases result ->
             case result of
                 Ok phrases ->
-                    ( { model | phrases = String.split "\n" phrases |> List.map Phrase |> Success }, Cmd.none )
+                    ( { model | phrases = String.lines phrases |> List.map Phrase |> Success }, Cmd.none )
 
                 Err _ ->
                     ( { model | phrases = Failure }, Cmd.none )
@@ -89,7 +90,7 @@ view model =
 viewPuns : Model -> Html Msg
 viewPuns model =
     div []
-        [ rhymeView model.rhymes, phraseView model.phrases ]
+        [ rhymeView model.rhymes, phraseView model ]
 
 
 rhymeView : RhymeResult -> Html Msg
@@ -102,14 +103,12 @@ rhymeView rhymeResult =
             text "Loading..."
 
         Success rhymes ->
-            rhymeList
-                rhymes
-                |> div []
+            rhymeList rhymes
 
 
-phraseView : PhraseResult -> Html Msg
-phraseView phraseResult =
-    case phraseResult of
+phraseView : Model -> Html Msg
+phraseView model =
+    case model.phrases of
         Failure ->
             text "It failed"
 
@@ -117,18 +116,17 @@ phraseView phraseResult =
             text "Loading..."
 
         Success phrases ->
-            List.map phraseToParagraph
-                phrases
-                |> div []
+            phraseList phrases model.word
 
 
-rhymeList : List Rhyme -> List (Html Msg)
+rhymeList : List Rhyme -> Html Msg
 rhymeList rhymes =
     List.map
         rhymeToParagraph
         (goodRhymes
             rhymes
         )
+        |> div []
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -146,19 +144,43 @@ rhymeToParagraph rhyme =
     p [] [ text rhyme.word ]
 
 
-phraseToParagraph : Phrase -> Html Msg
-phraseToParagraph phrase =
+phraseList : List Phrase -> String -> Html Msg
+phraseList phrases word =
+    List.map
+        (\phrase -> phraseToString phrase)
+        phrases
+        |> List.filter (\phrase -> containsMatch phrase word)
+        |> List.map (\phrase -> p [] [ text phrase ])
+        |> div []
+
+
+containsMatch : String -> String -> Bool
+containsMatch phrase word =
+    List.any (equals word) (String.words phrase)
+
+
+equals : a -> a -> Bool
+equals first second =
+    if first == second then
+        True
+
+    else
+        False
+
+
+phraseToString : Phrase -> String
+phraseToString phrase =
     let
-        (Phrase magic) =
+        (Phrase string) =
             phrase
     in
-    p [] [ text magic ]
+    string
 
 
-getRhymes : Cmd Msg
-getRhymes =
+getRhymes : String -> Cmd Msg
+getRhymes word =
     Http.get
-        { url = "https://rhymebrain.com/talk?function=getRhymes&word=heart"
+        { url = "https://rhymebrain.com/talk?function=getRhymes&word=" ++ word
         , expect = Http.expectJson GotRhymes rhymesDecoder
         }
 
