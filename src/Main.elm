@@ -26,6 +26,10 @@ type Phrase
     = Phrase String
 
 
+type Pun
+    = Pun String
+
+
 type alias PhraseResult =
     RemoteData (List Phrase)
 
@@ -33,6 +37,7 @@ type alias PhraseResult =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
+    , puns : List Pun
     , word : String
     }
 
@@ -49,7 +54,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
+    ( Model Loading Loading [] "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
 
 
 type Msg
@@ -71,7 +76,14 @@ update msg model =
         GotPhrases result ->
             case result of
                 Ok phrases ->
-                    ( { model | phrases = String.lines phrases |> List.map Phrase |> Success }, Cmd.none )
+                    ( { model
+                        | phrases =
+                            String.lines phrases
+                                |> List.map Phrase
+                                |> Success
+                      }
+                    , Cmd.none
+                    )
 
                 Err _ ->
                     ( { model | phrases = Failure }, Cmd.none )
@@ -84,49 +96,46 @@ subscriptions _ =
 
 view : Model -> Html Msg
 view model =
-    viewPuns model
+    punView model
 
 
-viewPuns : Model -> Html Msg
-viewPuns model =
-    div []
-        [ rhymeView model.rhymes, phraseView model ]
-
-
-rhymeView : RhymeResult -> Html Msg
-rhymeView rhymeResult =
-    case rhymeResult of
+punView : Model -> Html Msg
+punView model =
+    case model.rhymes of
         Failure ->
-            text "It failed"
+            text "It failed :("
 
         Loading ->
             text "Loading..."
 
         Success rhymes ->
-            rhymeList rhymes
+            case model.phrases of
+                Failure ->
+                    text "It failed :("
+
+                Loading ->
+                    text "Loading..."
+
+                Success phrases ->
+                    punList (goodRhymes rhymes) phrases
 
 
-phraseView : Model -> Html Msg
-phraseView model =
-    case model.phrases of
-        Failure ->
-            text "It failed"
-
-        Loading ->
-            text "Loading..."
-
-        Success phrases ->
-            phraseList phrases model.word
-
-
-rhymeList : List Rhyme -> Html Msg
-rhymeList rhymes =
-    List.map
-        rhymeToParagraph
-        (goodRhymes
-            rhymes
-        )
+punList : List Rhyme -> List Phrase -> Html Msg
+punList rhymes phrases =
+    List.filter (\phrase -> hasMatchingRhymes phrase rhymes)
+        phrases
+        |> List.map
+            (\phrase -> phraseToString phrase)
+        |> List.map (\phrase -> p [] [ text phrase ])
         |> div []
+
+
+hasMatchingRhymes : Phrase -> List Rhyme -> Bool
+hasMatchingRhymes phrase rhymes =
+    List.map
+        (\rhyme -> phraseContainsMatchingWord (phraseToString phrase) rhyme.word)
+        rhymes
+        |> List.any isTrue
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -139,23 +148,8 @@ goodRhyme rhyme =
     rhyme.score >= 300
 
 
-rhymeToParagraph : Rhyme -> Html Msg
-rhymeToParagraph rhyme =
-    p [] [ text rhyme.word ]
-
-
-phraseList : List Phrase -> String -> Html Msg
-phraseList phrases word =
-    List.map
-        (\phrase -> phraseToString phrase)
-        phrases
-        |> List.filter (\phrase -> containsMatch phrase word)
-        |> List.map (\phrase -> p [] [ text phrase ])
-        |> div []
-
-
-containsMatch : String -> String -> Bool
-containsMatch phrase word =
+phraseContainsMatchingWord : String -> String -> Bool
+phraseContainsMatchingWord phrase word =
     List.any (equals word) (String.words phrase)
 
 
@@ -166,6 +160,11 @@ equals first second =
 
     else
         False
+
+
+isTrue : Bool -> Bool
+isTrue =
+    equals True
 
 
 phraseToString : Phrase -> String
