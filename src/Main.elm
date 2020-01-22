@@ -12,32 +12,37 @@ type RemoteData a
     | Success a
 
 
+type PunData a
+    = NoPuns
+    | JustPuns a
+
+
 type alias Rhyme =
     { word : String
     , score : Int
     }
 
 
-type alias RhymeResult =
-    RemoteData (List Rhyme)
-
-
 type Phrase
     = Phrase String
 
 
-type Pun
-    = Pun String
+type alias RhymeResult =
+    RemoteData (List Rhyme)
 
 
 type alias PhraseResult =
     RemoteData (List Phrase)
 
 
+type Pun
+    = Pun String
+
+
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
-    , puns : List Pun
+    , puns : PunData (List Pun)
     , word : String
     }
 
@@ -54,12 +59,13 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading [] "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
+    ( Model Loading Loading NoPuns "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
 
 
 type Msg
     = GotRhymes (Result Error (List Rhyme))
     | GotPhrases (Result Error String)
+    | SetPuns Model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -68,7 +74,11 @@ update msg model =
         GotRhymes result ->
             case result of
                 Ok rhymes ->
-                    ( { model | rhymes = Success rhymes }, Cmd.none )
+                    let
+                        newModel =
+                            { model | rhymes = Success rhymes }
+                    in
+                    update (SetPuns newModel) newModel
 
                 Err _ ->
                     ( { model | rhymes = Failure }, Cmd.none )
@@ -76,17 +86,22 @@ update msg model =
         GotPhrases result ->
             case result of
                 Ok phrases ->
-                    ( { model
-                        | phrases =
-                            String.lines phrases
-                                |> List.map Phrase
-                                |> Success
-                      }
-                    , Cmd.none
-                    )
+                    let
+                        newModel =
+                            { model
+                                | phrases =
+                                    String.lines phrases
+                                        |> List.map Phrase
+                                        |> Success
+                            }
+                    in
+                    update (SetPuns newModel) newModel
 
                 Err _ ->
                     ( { model | phrases = Failure }, Cmd.none )
+
+        SetPuns newModel ->
+            ( { newModel | puns = JustPuns (punList model) }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -96,11 +111,6 @@ subscriptions _ =
 
 view : Model -> Html Msg
 view model =
-    punView model
-
-
-punView : Model -> Html Msg
-punView model =
     case model.rhymes of
         Failure ->
             text "It failed :("
@@ -108,7 +118,7 @@ punView model =
         Loading ->
             text "Loading..."
 
-        Success rhymes ->
+        Success _ ->
             case model.phrases of
                 Failure ->
                     text "It failed :("
@@ -116,18 +126,31 @@ punView model =
                 Loading ->
                     text "Loading..."
 
-                Success phrases ->
-                    punList (goodRhymes rhymes) phrases
+                Success _ ->
+                    case model.puns of
+                        NoPuns ->
+                            text "No puns yet"
+
+                        JustPuns puns ->
+                            List.map
+                                (\pun -> p [] [ text pun ])
+                                (punsToStrings puns)
+                                |> div []
 
 
-punList : List Rhyme -> List Phrase -> Html Msg
-punList rhymes phrases =
-    List.filter (\phrase -> hasMatchingRhymes phrase rhymes)
-        phrases
+punList : Model -> List Pun
+punList model =
+    List.filter
+        (\phrase ->
+            hasMatchingRhymes phrase
+                (goodRhymes (rhymeList model.rhymes))
+        )
+        (phraseResultToPhraseList
+            model.phrases
+        )
         |> List.map
             (\phrase -> phraseToString phrase)
-        |> List.map (\phrase -> p [] [ text phrase ])
-        |> div []
+        |> List.map (\phrase -> Pun phrase)
 
 
 hasMatchingRhymes : Phrase -> List Rhyme -> Bool
@@ -136,6 +159,19 @@ hasMatchingRhymes phrase rhymes =
         (\rhyme -> phraseContainsMatchingWord (phraseToString phrase) rhyme.word)
         rhymes
         |> List.any isTrue
+
+
+rhymeList : RhymeResult -> List Rhyme
+rhymeList rhymeResult =
+    case rhymeResult of
+        Failure ->
+            []
+
+        Loading ->
+            []
+
+        Success rhyme ->
+            rhyme
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -174,6 +210,33 @@ phraseToString phrase =
             phrase
     in
     string
+
+
+punsToStrings : List Pun -> List String
+punsToStrings puns =
+    List.map (\pun -> punToString pun) puns
+
+
+punToString : Pun -> String
+punToString pun =
+    let
+        (Pun string) =
+            pun
+    in
+    string
+
+
+phraseResultToPhraseList : PhraseResult -> List Phrase
+phraseResultToPhraseList result =
+    case result of
+        Failure ->
+            []
+
+        Loading ->
+            []
+
+        Success phrases ->
+            phrases
 
 
 getRhymes : String -> Cmd Msg
