@@ -59,7 +59,7 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading NoPuns "heart", Cmd.batch [ getRhymes "heart", getPhrases ] )
+    ( Model Loading Loading NoPuns "code", Cmd.batch [ getRhymes "code", getPhrases ] )
 
 
 type Msg
@@ -132,10 +132,39 @@ view model =
                             text "No puns yet"
 
                         JustPuns puns ->
-                            List.map
-                                (\pun -> p [] [ text pun ])
-                                (punsToStrings puns)
-                                |> div []
+                            punView puns
+
+
+punView : List Pun -> Html Msg
+punView puns =
+    punParagraphs (punsToStrings puns) |> div []
+
+
+punParagraphs : List String -> List (Html Msg)
+punParagraphs puns =
+    List.map (\pun -> p [] [ text pun ]) puns
+
+
+punWithPunchline : String -> List Rhyme -> String -> String
+punWithPunchline phrase rhymes word =
+    phrase
+        ++ "... more like: "
+        ++ String.replace
+            (case matchingRhyme phrase rhymes of
+                Just rhyme ->
+                    rhyme.word
+
+                Nothing ->
+                    ""
+            )
+            word
+            phrase
+
+
+matchingRhyme : String -> List Rhyme -> Maybe Rhyme
+matchingRhyme phrase rhymes =
+    List.filter (\rhyme -> List.member rhyme.word (String.words phrase)) rhymes
+        |> List.head
 
 
 punList : Model -> List Pun
@@ -150,6 +179,13 @@ punList model =
         )
         |> List.map
             (\phrase -> phraseToString phrase)
+        |> List.map
+            (\phrase ->
+                punWithPunchline
+                    phrase
+                    (goodRhymes (rhymeList model.rhymes))
+                    model.word
+            )
         |> List.map (\phrase -> Pun phrase)
 
 
