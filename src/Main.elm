@@ -6,6 +6,37 @@ import Http exposing (Error)
 import Json.Decode exposing (Decoder, field, int, list, map2, string)
 
 
+
+-- APP
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    ( Model Loading Loading NoPuns "code", Cmd.batch [ getRhymes "code", getPhrases ] )
+
+
+
+-- MODEL
+
+
+type alias Model =
+    { rhymes : RhymeResult
+    , phrases : PhraseResult
+    , puns : PunData (List Pun)
+    , word : String
+    }
+
+
 type RemoteData a
     = Loading
     | Failure
@@ -39,27 +70,8 @@ type Pun
     = Pun String
 
 
-type alias Model =
-    { rhymes : RhymeResult
-    , phrases : PhraseResult
-    , puns : PunData (List Pun)
-    , word : String
-    }
 
-
-main : Program () Model Msg
-main =
-    Browser.element
-        { init = init
-        , view = view
-        , update = update
-        , subscriptions = subscriptions
-        }
-
-
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( Model Loading Loading NoPuns "code", Cmd.batch [ getRhymes "code", getPhrases ] )
+-- UPDATE
 
 
 type Msg
@@ -104,9 +116,133 @@ update msg model =
             ( { newModel | puns = JustPuns (punList model) }, Cmd.none )
 
 
+punList : Model -> List Pun
+punList model =
+    List.filter
+        (\phrase ->
+            hasMatchingRhymes phrase
+                (goodRhymes (rhymeList model.rhymes))
+        )
+        (phraseResultToPhraseList
+            model.phrases
+        )
+        |> List.map
+            (\phrase -> phraseToString phrase)
+        |> List.map
+            (\phrase ->
+                punWithPunchline
+                    phrase
+                    (goodRhymes (rhymeList model.rhymes))
+                    model.word
+            )
+        |> List.map (\phrase -> Pun phrase)
+
+
+goodRhymes : List Rhyme -> List Rhyme
+goodRhymes rhymes =
+    List.filter goodRhyme rhymes
+
+
+goodRhyme : Rhyme -> Bool
+goodRhyme rhyme =
+    rhyme.score >= 300
+
+
+matchingRhyme : String -> List Rhyme -> Maybe Rhyme
+matchingRhyme phrase rhymes =
+    List.filter (\rhyme -> List.member rhyme.word (String.words phrase)) rhymes
+        |> List.head
+
+
+punWithPunchline : String -> List Rhyme -> String -> String
+punWithPunchline phrase rhymes word =
+    phrase
+        ++ "... more like: "
+        ++ String.replace
+            (case matchingRhyme phrase rhymes of
+                Just rhyme ->
+                    rhyme.word
+
+                Nothing ->
+                    ""
+            )
+            word
+            phrase
+
+
+hasMatchingRhymes : Phrase -> List Rhyme -> Bool
+hasMatchingRhymes phrase rhymes =
+    List.map
+        (\rhyme -> phraseContainsMatchingWord (phraseToString phrase) rhyme.word)
+        rhymes
+        |> List.any isTrue
+
+
+rhymeList : RhymeResult -> List Rhyme
+rhymeList rhymeResult =
+    case rhymeResult of
+        Failure ->
+            []
+
+        Loading ->
+            []
+
+        Success rhyme ->
+            rhyme
+
+
+phraseContainsMatchingWord : String -> String -> Bool
+phraseContainsMatchingWord phrase word =
+    List.any (equals word) (String.words phrase)
+
+
+equals : a -> a -> Bool
+equals first second =
+    if first == second then
+        True
+
+    else
+        False
+
+
+isTrue : Bool -> Bool
+isTrue =
+    equals True
+
+
+phraseToString : Phrase -> String
+phraseToString phrase =
+    let
+        (Phrase string) =
+            phrase
+    in
+    string
+
+
+phraseResultToPhraseList : PhraseResult -> List Phrase
+phraseResultToPhraseList result =
+    case result of
+        Failure ->
+            []
+
+        Loading ->
+            []
+
+        Success phrases ->
+            phrases
+
+
+
+-- SUBSCRIPTIONS
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.none
+
+
+
+-- VIEW
 
 
 view : Model -> Html Msg
@@ -145,109 +281,6 @@ punParagraphs puns =
     List.map (\pun -> p [] [ text pun ]) puns
 
 
-punWithPunchline : String -> List Rhyme -> String -> String
-punWithPunchline phrase rhymes word =
-    phrase
-        ++ "... more like: "
-        ++ String.replace
-            (case matchingRhyme phrase rhymes of
-                Just rhyme ->
-                    rhyme.word
-
-                Nothing ->
-                    ""
-            )
-            word
-            phrase
-
-
-matchingRhyme : String -> List Rhyme -> Maybe Rhyme
-matchingRhyme phrase rhymes =
-    List.filter (\rhyme -> List.member rhyme.word (String.words phrase)) rhymes
-        |> List.head
-
-
-punList : Model -> List Pun
-punList model =
-    List.filter
-        (\phrase ->
-            hasMatchingRhymes phrase
-                (goodRhymes (rhymeList model.rhymes))
-        )
-        (phraseResultToPhraseList
-            model.phrases
-        )
-        |> List.map
-            (\phrase -> phraseToString phrase)
-        |> List.map
-            (\phrase ->
-                punWithPunchline
-                    phrase
-                    (goodRhymes (rhymeList model.rhymes))
-                    model.word
-            )
-        |> List.map (\phrase -> Pun phrase)
-
-
-hasMatchingRhymes : Phrase -> List Rhyme -> Bool
-hasMatchingRhymes phrase rhymes =
-    List.map
-        (\rhyme -> phraseContainsMatchingWord (phraseToString phrase) rhyme.word)
-        rhymes
-        |> List.any isTrue
-
-
-rhymeList : RhymeResult -> List Rhyme
-rhymeList rhymeResult =
-    case rhymeResult of
-        Failure ->
-            []
-
-        Loading ->
-            []
-
-        Success rhyme ->
-            rhyme
-
-
-goodRhymes : List Rhyme -> List Rhyme
-goodRhymes rhymes =
-    List.filter goodRhyme rhymes
-
-
-goodRhyme : Rhyme -> Bool
-goodRhyme rhyme =
-    rhyme.score >= 300
-
-
-phraseContainsMatchingWord : String -> String -> Bool
-phraseContainsMatchingWord phrase word =
-    List.any (equals word) (String.words phrase)
-
-
-equals : a -> a -> Bool
-equals first second =
-    if first == second then
-        True
-
-    else
-        False
-
-
-isTrue : Bool -> Bool
-isTrue =
-    equals True
-
-
-phraseToString : Phrase -> String
-phraseToString phrase =
-    let
-        (Phrase string) =
-            phrase
-    in
-    string
-
-
 punsToStrings : List Pun -> List String
 punsToStrings puns =
     List.map (\pun -> punToString pun) puns
@@ -262,17 +295,16 @@ punToString pun =
     string
 
 
-phraseResultToPhraseList : PhraseResult -> List Phrase
-phraseResultToPhraseList result =
-    case result of
-        Failure ->
-            []
 
-        Loading ->
-            []
+-- COMMANDS
 
-        Success phrases ->
-            phrases
+
+getPhrases : Cmd Msg
+getPhrases =
+    Http.get
+        { url = "/data/wikipedia-idioms.txt"
+        , expect = Http.expectString GotPhrases
+        }
 
 
 getRhymes : String -> Cmd Msg
@@ -291,11 +323,3 @@ rhymesDecoder =
 rhymeDecoder : Decoder Rhyme
 rhymeDecoder =
     map2 Rhyme (field "word" string) (field "score" int)
-
-
-getPhrases : Cmd Msg
-getPhrases =
-    Http.get
-        { url = "/data/wikipedia-idioms.txt"
-        , expect = Http.expectString GotPhrases
-        }
