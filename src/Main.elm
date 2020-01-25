@@ -22,7 +22,9 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading NoPuns "code", Cmd.batch [ getRhymes "code", getPhrases ] )
+    ( Model Loading Loading Maybe.Nothing "code"
+    , Cmd.batch [ getRhymes "code", getPhrases ]
+    )
 
 
 
@@ -32,7 +34,7 @@ init _ =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
-    , puns : PunData (List Pun)
+    , puns : Maybe (List Pun)
     , word : String
     }
 
@@ -41,11 +43,6 @@ type RemoteData a
     = Loading
     | Failure
     | Success a
-
-
-type PunData a
-    = NoPuns
-    | JustPuns a
 
 
 type alias Rhyme =
@@ -113,7 +110,7 @@ update msg model =
                     ( { model | phrases = Failure }, Cmd.none )
 
         SetPuns newModel ->
-            ( { newModel | puns = JustPuns (punList model) }, Cmd.none )
+            ( { newModel | puns = Maybe.Just (punList model) }, Cmd.none )
 
 
 punList : Model -> List Pun
@@ -127,15 +124,11 @@ punList model =
             model.phrases
         )
         |> List.map
-            (\phrase -> phraseToString phrase)
-        |> List.map
-            (\phrase ->
-                punWithPunchline
-                    phrase
-                    (goodRhymes (rhymeList model.rhymes))
-                    model.word
+            (rhymesAndWordMakePhrasePunchline
+                (goodRhymes (rhymeList model.rhymes))
+                model.word
             )
-        |> List.map (\phrase -> Pun phrase)
+        |> List.map Pun
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -148,34 +141,50 @@ goodRhyme rhyme =
     rhyme.score >= 300
 
 
+rhymesAndWordMakePhrasePunchline : List Rhyme -> String -> Phrase -> String
+rhymesAndWordMakePhrasePunchline rhymes word phrase =
+    let
+        (Phrase phraseString) =
+            phrase
+    in
+    phraseString
+        ++ "... more like: "
+        ++ String.replace
+            (possibleRhyme phrase rhymes)
+            word
+            phraseString
+
+
+possibleRhyme : Phrase -> List Rhyme -> String
+possibleRhyme phrase rhymes =
+    case matchingRhyme (phraseToString phrase) rhymes of
+        Just rhyme ->
+            rhyme.word
+
+        Nothing ->
+            ""
+
+
 matchingRhyme : String -> List Rhyme -> Maybe Rhyme
 matchingRhyme phrase rhymes =
     List.filter (\rhyme -> List.member rhyme.word (String.words phrase)) rhymes
         |> List.head
 
 
-punWithPunchline : String -> List Rhyme -> String -> String
-punWithPunchline phrase rhymes word =
-    phrase
-        ++ "... more like: "
-        ++ String.replace
-            (case matchingRhyme phrase rhymes of
-                Just rhyme ->
-                    rhyme.word
-
-                Nothing ->
-                    ""
-            )
-            word
-            phrase
-
-
 hasMatchingRhymes : Phrase -> List Rhyme -> Bool
 hasMatchingRhymes phrase rhymes =
-    List.map
-        (\rhyme -> phraseContainsMatchingWord (phraseToString phrase) rhyme.word)
-        rhymes
-        |> List.any isTrue
+    let
+        (Phrase phraseString) =
+            phrase
+    in
+    List.map .word rhymes
+        |> List.map (phraseContainsMatchingWord phraseString)
+        |> List.member True
+
+
+phraseContainsMatchingWord : String -> String -> Bool
+phraseContainsMatchingWord phrase word =
+    List.member word (String.words phrase)
 
 
 rhymeList : RhymeResult -> List Rhyme
@@ -189,25 +198,6 @@ rhymeList rhymeResult =
 
         Success rhyme ->
             rhyme
-
-
-phraseContainsMatchingWord : String -> String -> Bool
-phraseContainsMatchingWord phrase word =
-    List.any (equals word) (String.words phrase)
-
-
-equals : a -> a -> Bool
-equals first second =
-    if first == second then
-        True
-
-    else
-        False
-
-
-isTrue : Bool -> Bool
-isTrue =
-    equals True
 
 
 phraseToString : Phrase -> String
@@ -264,10 +254,10 @@ view model =
 
                 Success _ ->
                     case model.puns of
-                        NoPuns ->
+                        Nothing ->
                             text "No puns yet"
 
-                        JustPuns puns ->
+                        Just puns ->
                             punView puns
 
 
@@ -283,7 +273,7 @@ punParagraphs puns =
 
 punsToStrings : List Pun -> List String
 punsToStrings puns =
-    List.map (\pun -> punToString pun) puns
+    List.map punToString puns
 
 
 punToString : Pun -> String
