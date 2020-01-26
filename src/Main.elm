@@ -85,7 +85,7 @@ update msg model =
                 Ok rhymes ->
                     let
                         newModel =
-                            { model | rhymes = Success rhymes }
+                            { model | rhymes = Success (goodRhymes rhymes) }
                     in
                     update (SetPuns newModel) newModel
 
@@ -113,24 +113,6 @@ update msg model =
             ( { newModel | puns = Maybe.Just (punList model) }, Cmd.none )
 
 
-punList : Model -> List Pun
-punList model =
-    List.filter
-        (\phrase ->
-            hasMatchingRhymes phrase
-                (goodRhymes (rhymeList model.rhymes))
-        )
-        (phraseResultToPhraseList
-            model.phrases
-        )
-        |> List.map
-            (rhymesAndWordMakePhrasePunchline
-                (goodRhymes (rhymeList model.rhymes))
-                model.word
-            )
-        |> List.map Pun
-
-
 goodRhymes : List Rhyme -> List Rhyme
 goodRhymes rhymes =
     List.filter goodRhyme rhymes
@@ -139,6 +121,31 @@ goodRhymes rhymes =
 goodRhyme : Rhyme -> Bool
 goodRhyme rhyme =
     rhyme.score >= 300
+
+
+punList : Model -> List Pun
+punList model =
+    let
+        phrases =
+            phraseResultToPhraseList model.phrases
+
+        rhymes =
+            rhymeList model.rhymes
+    in
+    List.filter (hasMatchingRhymes rhymes) phrases
+        |> List.map
+            (rhymesAndWordMakePhrasePunchline rhymes model.word)
+        |> List.map Pun
+
+
+hasMatchingRhymes : List Rhyme -> Phrase -> Bool
+hasMatchingRhymes rhymes phrase =
+    let
+        (Phrase phraseString) =
+            phrase
+    in
+    List.map (phraseContainsMatchingRhyme phraseString) rhymes
+        |> List.member True
 
 
 rhymesAndWordMakePhrasePunchline : List Rhyme -> String -> Phrase -> String
@@ -167,24 +174,13 @@ possibleRhyme phrase rhymes =
 
 matchingRhyme : String -> List Rhyme -> Maybe Rhyme
 matchingRhyme phrase rhymes =
-    List.filter (\rhyme -> List.member rhyme.word (String.words phrase)) rhymes
+    List.filter (phraseContainsMatchingRhyme phrase) rhymes
         |> List.head
 
 
-hasMatchingRhymes : Phrase -> List Rhyme -> Bool
-hasMatchingRhymes phrase rhymes =
-    let
-        (Phrase phraseString) =
-            phrase
-    in
-    List.map .word rhymes
-        |> List.map (phraseContainsMatchingWord phraseString)
-        |> List.member True
-
-
-phraseContainsMatchingWord : String -> String -> Bool
-phraseContainsMatchingWord phrase word =
-    List.member word (String.words phrase)
+phraseContainsMatchingRhyme : String -> Rhyme -> Bool
+phraseContainsMatchingRhyme phrase rhyme =
+    List.member rhyme.word (String.words phrase)
 
 
 rhymeList : RhymeResult -> List Rhyme
@@ -268,7 +264,9 @@ punView puns =
 
 punParagraphs : List String -> List (Html Msg)
 punParagraphs puns =
-    List.map (\pun -> p [] [ text pun ]) puns
+    List.map text puns
+        |> List.map List.singleton
+        |> List.map (p [])
 
 
 punsToStrings : List Pun -> List String
