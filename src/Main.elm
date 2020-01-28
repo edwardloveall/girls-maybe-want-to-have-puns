@@ -22,7 +22,7 @@ main =
 
 initialModel : Model
 initialModel =
-    Model Loading Loading [] "code"
+    { rhymes = Loading, phrases = Loading, word = "code" }
 
 
 init : () -> ( Model, Cmd Msg )
@@ -39,7 +39,6 @@ init _ =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
-    , puns : List Pun
     , word : String
     }
 
@@ -158,8 +157,8 @@ rhymesAndWordMakePhrasePunchline rhymes word phrase =
 
 
 possibleRhyme : Phrase -> List Rhyme -> String
-possibleRhyme phrase rhymes =
-    case matchingRhyme (phraseToString phrase) rhymes of
+possibleRhyme (Phrase phrase) rhymes =
+    case matchingRhyme phrase rhymes of
         Just rhyme ->
             rhyme.word
 
@@ -181,32 +180,21 @@ phraseContainsMatchingRhyme phrase rhyme =
 rhymeList : RhymeResult -> List Rhyme
 rhymeList rhymeResult =
     case rhymeResult of
-        Failure ->
-            []
-
-        Loading ->
-            []
-
         Success rhyme ->
             rhyme
 
-
-phraseToString : Phrase -> String
-phraseToString (Phrase phrase) =
-    phrase
+        _ ->
+            []
 
 
 phraseResultToPhraseList : PhraseResult -> List Phrase
 phraseResultToPhraseList result =
     case result of
-        Failure ->
-            []
-
-        Loading ->
-            []
-
         Success phrases ->
             phrases
+
+        _ ->
+            []
 
 
 
@@ -250,19 +238,15 @@ punView puns =
             text "No puns :("
 
         _ ->
-            punParagraphs (punsToStrings puns) |> div []
+            punParagraphs puns |> div []
 
 
-punParagraphs : List String -> List (Html Msg)
+punParagraphs : List Pun -> List (Html Msg)
 punParagraphs puns =
-    List.map text puns
+    List.map punToString puns
+        |> List.map text
         |> List.map List.singleton
         |> List.map (p [])
-
-
-punsToStrings : List Pun -> List String
-punsToStrings puns =
-    List.map punToString puns
 
 
 punToString : Pun -> String
