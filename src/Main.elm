@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg, init, subscriptions, update, view)
+module Main exposing (Model, Msg, init, main, subscriptions, update, view)
 
 import Browser
 import Html exposing (Html, div, p, text)
@@ -20,10 +20,15 @@ main =
         }
 
 
+initialModel : Model
+initialModel =
+    Model Loading Loading [] "code"
+
+
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( Model Loading Loading Maybe.Nothing "code"
-    , Cmd.batch [ getRhymes "code", getPhrases ]
+    ( initialModel
+    , Cmd.batch [ getRhymes initialModel.word, getPhrases ]
     )
 
 
@@ -34,7 +39,7 @@ init _ =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
-    , puns : Maybe (List Pun)
+    , puns : List Pun
     , word : String
     }
 
@@ -74,7 +79,6 @@ type Pun
 type Msg
     = GotRhymes (Result Error (List Rhyme))
     | GotPhrases (Result Error String)
-    | SetPuns Model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -83,11 +87,7 @@ update msg model =
         GotRhymes result ->
             case result of
                 Ok rhymes ->
-                    let
-                        newModel =
-                            { model | rhymes = Success (goodRhymes rhymes) }
-                    in
-                    update (SetPuns newModel) newModel
+                    ( { model | rhymes = Success (goodRhymes rhymes) }, Cmd.none )
 
                 Err _ ->
                     ( { model | rhymes = Failure }, Cmd.none )
@@ -95,22 +95,17 @@ update msg model =
         GotPhrases result ->
             case result of
                 Ok phrases ->
-                    let
-                        newModel =
-                            { model
-                                | phrases =
-                                    String.lines phrases
-                                        |> List.map Phrase
-                                        |> Success
-                            }
-                    in
-                    update (SetPuns newModel) newModel
+                    ( { model
+                        | phrases =
+                            String.lines phrases
+                                |> List.map Phrase
+                                |> Success
+                      }
+                    , Cmd.none
+                    )
 
                 Err _ ->
                     ( { model | phrases = Failure }, Cmd.none )
-
-        SetPuns newModel ->
-            ( { newModel | puns = Maybe.Just (punList model) }, Cmd.none )
 
 
 goodRhymes : List Rhyme -> List Rhyme
@@ -197,12 +192,8 @@ rhymeList rhymeResult =
 
 
 phraseToString : Phrase -> String
-phraseToString phrase =
-    let
-        (Phrase string) =
-            phrase
-    in
-    string
+phraseToString (Phrase phrase) =
+    phrase
 
 
 phraseResultToPhraseList : PhraseResult -> List Phrase
@@ -249,17 +240,17 @@ view model =
                     text "Loading..."
 
                 Success _ ->
-                    case model.puns of
-                        Nothing ->
-                            text "No puns yet"
-
-                        Just puns ->
-                            punView puns
+                    punView (punList model)
 
 
 punView : List Pun -> Html Msg
 punView puns =
-    punParagraphs (punsToStrings puns) |> div []
+    case puns of
+        [] ->
+            text "No puns :("
+
+        _ ->
+            punParagraphs (punsToStrings puns) |> div []
 
 
 punParagraphs : List String -> List (Html Msg)
@@ -275,12 +266,8 @@ punsToStrings puns =
 
 
 punToString : Pun -> String
-punToString pun =
-    let
-        (Pun string) =
-            pun
-    in
-    string
+punToString (Pun pun) =
+    pun
 
 
 
