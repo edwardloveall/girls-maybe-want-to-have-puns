@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg, init, main, subscriptions, update, view)
+module Main exposing (Model, Msg, init, main, update, view)
 
 import Browser
 import Html exposing (Html, div, p, text)
@@ -16,7 +16,7 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = subscriptions
+        , subscriptions = \_ -> Sub.none
         }
 
 
@@ -195,15 +195,6 @@ phraseResultToPhraseList result =
 
         _ ->
             []
-
-
-
--- SUBSCRIPTIONS
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
 
 
 
