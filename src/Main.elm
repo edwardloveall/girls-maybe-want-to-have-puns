@@ -1,7 +1,10 @@
 module Main exposing (Model, Msg, init, main, update, view)
 
 import Browser
-import Html exposing (Html, div, p, text)
+import Debouncer exposing (DebouncedInput)
+import Html exposing (Html, div, input, label, p, text)
+import Html.Attributes exposing (for, id, value)
+import Html.Events exposing (onInput)
 import Http exposing (Error)
 import Json.Decode exposing (Decoder, field, int, list, map2, string)
 
@@ -22,13 +25,16 @@ main =
 
 initialModel : Model
 initialModel =
-    { rhymes = Loading, phrases = Loading, word = "code" }
+    { rhymes = NotAsked
+    , phrases = NotAsked
+    , debouncedInput = Debouncer.initial
+    }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( initialModel
-    , Cmd.batch [ getRhymes initialModel.word, getPhrases ]
+    , getPhrases
     )
 
 
@@ -39,12 +45,13 @@ init _ =
 type alias Model =
     { rhymes : RhymeResult
     , phrases : PhraseResult
-    , word : String
+    , debouncedInput : DebouncedInput
     }
 
 
 type RemoteData a
-    = Loading
+    = NotAsked
+    | Loading
     | Failure
     | Success a
 
@@ -78,6 +85,8 @@ type Pun
 type Msg
     = GotRhymes (Result Error (List Rhyme))
     | GotPhrases (Result Error String)
+    | WordInput String
+    | FinishedWord String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -106,6 +115,26 @@ update msg model =
                 Err _ ->
                     ( { model | phrases = Failure }, Cmd.none )
 
+        WordInput word ->
+            let
+                ( debouncer, cmd ) =
+                    Debouncer.debounce word model.debouncedInput FinishedWord
+            in
+            ( { model | debouncedInput = debouncer, rhymes = NotAsked }, cmd )
+
+        FinishedWord word ->
+            let
+                debouncer =
+                    Debouncer.updateDelayed word model.debouncedInput
+            in
+            if Debouncer.ready debouncer then
+                ( { model | debouncedInput = debouncer, rhymes = Loading }
+                , getRhymes <| word
+                )
+
+            else
+                ( { model | debouncedInput = debouncer }, Cmd.none )
+
 
 goodRhymes : List Rhyme -> List Rhyme
 goodRhymes rhymes =
@@ -128,7 +157,7 @@ punList model =
     in
     List.filter (hasMatchingRhymes rhymes) phrases
         |> List.map
-            (rhymesAndWordMakePhrasePunchline rhymes model.word)
+            (rhymesAndWordMakePhrasePunchline rhymes <| Debouncer.changedValue model.debouncedInput)
         |> List.map Pun
 
 
@@ -203,7 +232,18 @@ phraseResultToPhraseList result =
 
 view : Model -> Html Msg
 view model =
-    case model.rhymes of
+    div []
+        [ inputView model
+        , punView model
+        ]
+
+
+punView : Model -> Html Msg
+punView model =
+    case model.phrases of
+        NotAsked ->
+            text "Type a word above for puns"
+
         Failure ->
             text "It failed :("
 
@@ -211,7 +251,14 @@ view model =
             text "Loading..."
 
         Success _ ->
-            case model.phrases of
+            case model.rhymes of
+                NotAsked ->
+                    if Debouncer.isWaiting model.debouncedInput then
+                        text "Waiting for typing to complete before puns are generated"
+
+                    else
+                        text "Type a word above for puns"
+
                 Failure ->
                     text "It failed :("
 
@@ -219,17 +266,12 @@ view model =
                     text "Loading..."
 
                 Success _ ->
-                    punView (punList model)
+                    case punList model of
+                        [] ->
+                            text "No puns :("
 
-
-punView : List Pun -> Html Msg
-punView puns =
-    case puns of
-        [] ->
-            text "No puns :("
-
-        _ ->
-            punParagraphs puns |> div []
+                        _ ->
+                            punParagraphs (punList model) |> div []
 
 
 punParagraphs : List Pun -> List (Html Msg)
@@ -243,6 +285,14 @@ punParagraphs puns =
 punToString : Pun -> String
 punToString (Pun pun) =
     pun
+
+
+inputView : Model -> Html Msg
+inputView model =
+    div []
+        [ label [ for "rhyme-word" ] [ text "Word: " ]
+        , input [ id "rhyme-word", value <| Debouncer.changedValue model.debouncedInput, onInput WordInput ] []
+        ]
 
 
 
@@ -260,7 +310,11 @@ getPhrases =
 getRhymes : String -> Cmd Msg
 getRhymes word =
     Http.get
+        -- uncomment below if you want to real rhyme data
         { url = "https://rhymebrain.com/talk?function=getRhymes&word=" ++ word
+
+        -- uncomment below if you want to use pre-downloaded rhyme data
+        -- { url = "/data/" ++ word ++ "-rhymes.json"
         , expect = Http.expectJson GotRhymes rhymesDecoder
         }
 
